@@ -3,8 +3,12 @@ import os
 import sys
 import threading
 import time
+import gradio as gr
 
+from indextts.infer import IndexTTS
+from tools.i18n.i18n import I18nAuto
 import warnings
+
 warnings.filterwarnings("ignore", category=FutureWarning)
 warnings.filterwarnings("ignore", category=UserWarning)
 
@@ -35,10 +39,6 @@ for file in [
         print(f"Required file {file_path} does not exist. Please download it.")
         sys.exit(1)
 
-import gradio as gr
-
-from indextts.infer import IndexTTS
-from tools.i18n.i18n import I18nAuto
 
 i18n = I18nAuto(language="zh_CN")
 MODE = 'local'
