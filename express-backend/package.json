@@ -1,0 +1,22 @@
+{
+  "name": "express-backend",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "description": "",
+  "dependencies": {
+    "@gradio/client": "^1.15.4",
+    "@signalwire/realtime-api": "^4.1.2",
+    "body-parser": "^2.2.0",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "log4js": "^6.9.1",
+    "multer": "^2.0.1"
+  }
+}
