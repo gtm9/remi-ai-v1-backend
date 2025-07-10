@@ -36,7 +36,7 @@ app.use(cors({
 app.use(express.json()); // USE THIS FOR BODY PARSING
 
 // --- Gradio Configuration ---
-const GRADIO_API_URL = "https://f4940f9875a945e06d.gradio.live/";
+const GRADIO_API_URL = "https://06c5788ae2d674a3ce.gradio.live/";
 const GRADIO_PREDICT_PATH = "/gen_single";
 
 // Directory for temporary downloaded files (using __dirname for absolute path)
@@ -167,65 +167,58 @@ app.post('/predict-gradio', async (req, res) => {
                 // Fallback: If processing fails, send the original problematic URL.
             }
         }
-        processedResult = result; // Use the (potentially modified) result
-
+        processedResult = result.data[0].value.url; // Use the (potentially modified) result
         // --- Upload to Cloudflare ---
         // 1. Download the audio file from the Gradio public URL
-        const gradioAudioUrl = processedResult.data[0].value.url;
-        let cloudflareAudioUrl = null;
-        try {
-            const audioResponse = await fetch(gradioAudioUrl);
-            if (!audioResponse.ok) {
-                throw new Error(`Failed to download audio from Gradio URL: ${audioResponse.status} ${audioResponse.statusText}`);
-            }
-            console.log('Audio downloaded from Gradio URL successfully.',audioResponse);
-            const audioBuffer = Buffer.from(await audioResponse.arrayBuffer());
+        const gradioAudioUrl = processedResult;
+  
+        const audioResponse = await fetch(gradioAudioUrl);
+        if (!audioResponse.ok) {
+            throw new Error(`Failed to download audio from Gradio URL: ${audioResponse.status} ${audioResponse.statusText}`);
+        }
+        console.log('Audio downloaded from Gradio URL successfully.',audioResponse);
+        const audioBuffer = Buffer.from(await audioResponse.arrayBuffer());
 
-            const formData = new FormData();
-            formData.append('file', {
-                id: `uploaded_${Date.now()}`,
-                uri: audioBuffer.uri,
-            });
+        const formData = new FormData();
+        const fileName = `uploaded_${Date.now()}.wav`; // Use correct extension if known
+        const blob = new Blob([audioBuffer], { type: 'audio/wav' }); // Set correct MIME type if known
+        formData.append('file', blob, fileName);
 
-            const url = new URL('https://myportal-api.src.xyz/api/v1.1/R2/Upload');
-            url.searchParams.append('selectR2Bucket', 'REMI_AI_VOICE_AUDIO_BUCKET');
-            url.searchParams.append('filePath', 'generated_audio_sources');
-            url.searchParams.append('id', `uploaded_${Date.now()}`);
-            url.searchParams.append('type', 'generated_audio');
+        const url = new URL('https://myportal-api.src.xyz/api/v1.1/R2/Upload');
+        url.searchParams.append('selectR2Bucket', 'REMI_AI_VOICE_AUDIO_BUCKET');
+        url.searchParams.append('filePath', 'generated_audio_sources');
+        url.searchParams.append('id', `uploaded_${Date.now()}`);
+        url.searchParams.append('type', 'generated_audio');
 
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: {
-                    accept: '*/*',
-                    'Content-Type': 'multipart/form-data',
-                },
-                body: formData,
-            });
+        const generatedAudioResponse = await fetch(url, {
+            method: 'POST',
+            headers: {
+                accept: '*/*',
+            },
+            body: formData,
+        });
 
-            if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(`Upload failed with status ${response.status}: ${errorText}`);
-            }
-
-            const responseData = await response.json();
-            console.log('Upload successful:', responseData);
-        } catch (cloudflareError) {
-            console.error('Error uploading to Cloudflare:', cloudflareError);
-            // Optionally, you can return the Gradio URL as fallback
-            cloudflareAudioUrl = gradioAudioUrl;
+        if (!generatedAudioResponse.ok) {
+            const errorText = await generatedAudioResponse.text();
+            throw new Error(`Upload failed with status ${response.status}: ${errorText}`);
         }
 
-                // --- Final response to frontend ---
+        const responseData = await generatedAudioResponse.json();
+        console.log('Upload successful:', responseData);
+
+        // --- Final response to frontend ---
         const finalResponseToFrontend = {
-            predictedAudioUrl: processedResult,
+            predictedAudioUrl: {
+                url: responseData.fileUrl, // Use the URL from the upload response
+                fileKey: responseData.fileKey, // Use the file key from the upload response
+                eTag: responseData.eTag, // Use the type from the upload response
+            },
             // You can also include other outputs if your Gradio model has them:
             // e.g., textOutput: gradioRawResult.data[1].value, // If a second output is text
             // Optional: for advanced debugging, you can send the raw result too:
             // rawGradioResult: gradioRawResult
         };
 
-
-        console.log('Gradio prediction processedResult:', finalResponseToFrontend.predictedAudioUrl.data[0].value.url);
         res.json(finalResponseToFrontend)
 
     } catch (error) {
