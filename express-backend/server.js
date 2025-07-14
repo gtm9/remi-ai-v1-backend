@@ -25,6 +25,7 @@ app.use(cors({
         'http://localhost',      // iOS Simulator
         'exp://localhost:19000', // Expo Go default
         'http://10.0.2.2:8080',   // Android Emulator loopback to host machine
+        'https://kjauxcs-gtm94-8081.exp.direct'
         // Add your actual local IP for testing on physical devices:
         // 'http://192.168.1.X:8080', // Replace with your computer's actual local IP and port
     ],
@@ -36,7 +37,7 @@ app.use(cors({
 app.use(express.json()); // USE THIS FOR BODY PARSING
 
 // --- Gradio Configuration ---
-const GRADIO_API_URL = "https://06c5788ae2d674a3ce.gradio.live/";
+const GRADIO_API_URL = "http://localhost:7860"; // Replace with your Gradio server URL
 const GRADIO_PREDICT_PATH = "/gen_single";
 
 // Directory for temporary downloaded files (using __dirname for absolute path)
@@ -48,17 +49,72 @@ fs.mkdir(TEMP_DOWNLOAD_DIR, { recursive: true }).catch(console.error);
 // --- Routes ---
 
 // Make call
-app.get('/make-call', async (req, res) => {
-    console.log("51 making call",req)
+app.post('/make-call', async (req, res) => {
+    const { generatedAudioUrl } = req.body.generatedAudioUrl.uri;
+    console.log("53 generatedAudioUrl",req.body.generatedAudioUrl.uri)
+    const phoneNumber = "+1" + req.body.reminder.phoneNumber;
+    // phoneNumber = +17373143030
+    console.log("56 phoneNumber",req.body.reminder.phoneNumber)
     const client = await SignalWire({ project: "83090b4a-5137-41db-93ad-784af9857fd9", token: "PT69a6951c78fa5ba46e3aa96d394a04d78a586f83e1e2949d" })
     const voiceClient = client.voice;
 
     const call = await voiceClient.dialPhone({
     from: "+15134341884",
-    to: "+17373143030"
+    to: phoneNumber,
     });
 
-    await call.playTTS({ text: "Welcome to SignalWire!" });
+    await call.playAudio({
+        url: generatedAudioUrl,
+        listen: {
+            onStarted: () => console.log("Started playing"),
+            onFailed: (err) => console.log("Failed to play", err),
+            onUpdated: (event) => console.log("Updated playing", event.state),
+            onEnded: async (event) => {
+                console.log("Ended playing", event.state);
+                try {
+                    await call.hangup();
+                } catch (err) {
+                    console.warn("Hangup error (likely call already ended):", err?.message || err);
+                }
+            }
+        }
+    }).onStarted();
+
+    // Listen for incoming calls
+    await voiceClient.listen({
+        topics: ["office"],
+        onCallReceived: async (call) => {
+            console.log("Call received");
+            // Answer the call and play an audio file. Listens for playback events. Ends the call after the audio file is finished playing.
+            call.answer();
+            await call.playTTS({
+            text: "Hello, this is a test call from SignalWire",
+            listen: {
+                onStarted: () => console.log("TTS started"),
+                onFailed: () => console.log("TTS failed"),
+                onUpdated: (tts) => console.log("TTS state:", tts.state),
+                onEnded: () => {
+                console.log("TTS ended");
+                // Hangup the call
+                call.hangup();
+                }
+            }
+            }).onStarted();
+            await call.playAudio({
+                url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
+                listen: {
+                    onStarted: () => console.log("Started playing"),
+                    onFailed: (err) => console.log("Failed to play", err),
+                    onUpdated: (event) => console.log("Updated playing", event.state),
+                    onEnded: (event) => {
+                        console.log("Ended playing", event.state);
+                        // Hangup the call
+                        call.hangup();
+                        }
+                }
+            }).onStarted();
+        }
+    });
     res.status(200).json({ status: 'ok', message: 'call is being made', timestamp: new Date().toISOString() });
 });
 
